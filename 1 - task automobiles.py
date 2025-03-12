@@ -13,21 +13,20 @@ def validate_number(value, field_name, min_value=0, max_value=None):
         try:
             num = float(value)
             if num < min_value or (max_value and num > max_value): raise ValueError
-            if field_name == "Рік випуску": return str(int(num))
-            elif field_name == "Обєм двигуна": return f"{num:.1f}"
-            elif field_name == "Ціна": return str(int(num))
-            return str(num)
+            return str(int(num)) if field_name in ["Рік випуску", "Ціна"] else f"{num:.01f}"
         except ValueError:
             value = input(f"Некоректне значення для {field_name}. Введіть ще раз: ")
 
-def format_value(field, value):
-    try:
-        if not value: return ""
-        if field == "Рік випуску": return str(int(float(value)))
-        elif field == "Ціна": return str(int(float(value)))
-        elif field == "Обєм двигуна": return f"{float(value):.1f}"
-    except: pass
-    return value
+def save_data(data):
+    with open(FILENAME, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=FIELDS)
+        writer.writeheader()
+        writer.writerows(data)
+
+def load_data():
+    if not file_exists(): return []
+    with open(FILENAME, "r", encoding="utf-8") as file:
+        return list(csv.DictReader(file))
 
 def add_car():
     car = {
@@ -38,85 +37,40 @@ def add_car():
         "Рік випуску": validate_number(input("Рік випуску: "), "Рік випуску", 1900, CURRENT_YEAR),
         "Ціна": validate_number(input("Ціна: "), "Ціна", 1)
     }
-    with open(FILENAME, mode="a", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=FIELDS)
-        if not file_exists(): writer.writeheader()
-        writer.writerow(car)
-    print("Дані додано!")
-
-def update_file_format():
-    if not file_exists(): return
-    try:
-        with open(FILENAME, "r", encoding="utf-8") as file: data = list(csv.DictReader(file))
-        if not data: return
-        need_update = any("." in row.get(field, "") for row in data for field in ["Рік випуску", "Ціна"])
-        if need_update:
-            for row in data:
-                for field in FIELDS:
-                    if field in row: row[field] = format_value(field, row[field])
-            with open(FILENAME, "w", newline="", encoding="utf-8") as file:
-                writer = csv.DictWriter(file, fieldnames=FIELDS)
-                writer.writeheader()
-                writer.writerows(data)
-    except Exception as e: print(f"Помилка при оновленні файлу: {e}")
+    data = load_data()
+    data.append(car)
+    save_data(data)
+    display_cars()
 
 def display_cars():
-    if not file_exists():
-        print("Файл ще не створений або порожній.")
+    data = load_data()
+    if not data:
+        print("Файл порожній або не існує.")
         return
-    try:
-        update_file_format()
-        with open(FILENAME, "r", encoding="utf-8") as file: data = list(csv.DictReader(file))
-        if not data:
-            print("Файл порожній.")
-            return
-        print("\n" + " | ".join(FIELDS))
-        print("-" * 80)
-        for row in data:
-            print(" | ".join([format_value(field, row.get(field, "")) for field in FIELDS]))
-    except Exception as e: print(f"Помилка при читанні файлу: {e}")
-
-def clear_file():
-    if file_exists():
-        os.remove(FILENAME)
-        print("Всі дані видалені!")
-    else: print("Файл ще не створений або вже порожній.")
-
-def get_existing_models():
-    if not file_exists(): return []
-    try:
-        with open(FILENAME, "r", encoding="utf-8") as file:
-            return [row.get("Модель", "").strip().lower() for row in csv.DictReader(file)]
-    except: return []
+    print("\n" + " | ".join(FIELDS))
+    print("-" * 80)
+    for row in data:
+        print(" | ".join(row[field] for field in FIELDS))
 
 def delete_car():
-    if not file_exists():
-        print("Файл ще не створений або порожній.")
+    data = load_data()
+    if not data:
+        print("Файл порожній.")
         return
-    models = get_existing_models()
-    if not models:
-        print("У файлі немає жодної моделі для видалення.")
-        return
-    unique_models = list(set(models))
-    print("Список існуючих моделей:")
-    for idx, model in enumerate(unique_models, 1): print(f"{idx}. {model}")
-    try:
-        choice = int(input("Оберіть модель за номером для видалення: "))
-        if choice < 1 or choice > len(unique_models):
-            print("Невірний вибір.")
-            return
-        model_to_delete = unique_models[choice - 1]
-        with open(FILENAME, "r", encoding="utf-8") as file: data = list(csv.DictReader(file))
-        new_data = [row for row in data if model_to_delete != row.get("Модель", "").strip().lower()]
-        deleted = len(data) - len(new_data)
-        if deleted == 0: print(f"Автомобіль з моделлю '{model_to_delete}' не знайдений.")
-        else:
-            with open(FILENAME, "w", newline="", encoding="utf-8") as file:
-                writer = csv.DictWriter(file, fieldnames=FIELDS)
-                writer.writeheader()
-                writer.writerows(new_data)
-            print(f"Видалено {deleted} запис(ів) з моделлю '{model_to_delete}'!")
-    except Exception as e: print(f"Помилка при видаленні: {e}")
+    display_cars()
+    model_to_delete = input("Введіть модель для видалення: ").strip().lower()
+    new_data = [row for row in data if row["Модель"].strip().lower() != model_to_delete]
+    if len(new_data) == len(data):
+        print("Такої моделі немає у списку.")
+    else:
+        save_data(new_data)
+        print("Автомобіль(і) видалено!")
+    display_cars()
+
+def clear_file():
+    save_data([])
+    print("Всі дані видалені!")
+    display_cars()
 
 def main():
     while True:
@@ -133,6 +87,7 @@ def main():
         elif choice == "5":
             print("Програма завершена.")
             break
-        else: print("Невірний вибір. Спробуйте ще раз.")
+        else:
+            print("Некоректний ввід. Введіть число від 1 до 5.")
 
 if __name__ == "__main__": main()
